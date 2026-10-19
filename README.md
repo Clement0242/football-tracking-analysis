@@ -6,7 +6,8 @@
 
 Sport-science analysis of **25 Hz player tracking data** (Metrica Sports open
 data, two professional matches): running loads, accelerations and
-decelerations, in-situ acceleration–speed profiles, worst-case demands and a
+decelerations, in-situ acceleration–speed profiles, worst-case demands,
+**mechanical and metabolic power with every equation written out**, and a
 vectorised implementation of **Spearman's pitch-control model**.
 
 *Version française plus bas.*
@@ -20,6 +21,7 @@ vectorised implementation of **Spearman's pitch-control model**.
 | `pitchtrack.io` | Reads Metrica CSVs, converts to metres on a 105 × 68 m pitch centred on the kick-off spot |
 | `pitchtrack.kinematics` | Filtered velocity / acceleration, speed-zone distances, acceleration & deceleration efforts, rolling intensity |
 | `pitchtrack.profiles` | In-situ acceleration–speed profile (A0, S0) after Morin et al. (2021) |
+| `pitchtrack.power` | Metabolic power (di Prampero & Osgnach 2018), external mechanical power and individual "burst" threshold (di Prampero / Osgnach et al. 2023), direction-sensitive load after Buchheit's GPS 3.0, VO₂ kinetics and metabolic power events |
 | `pitchtrack.pitch_control` | Spearman (2018) pitch control, integrated on the whole grid at once with NumPy |
 | `scripts/make_figures.py` | Every figure and results table below |
 
@@ -47,6 +49,35 @@ often not enough: profiles with R² < 0.7 are flagged as unreliable in
 
 ![Acceleration-speed profile](figures/acceleration_speed_profile.png)
 
+**Mechanical and metabolic power, without a black box.** Commercial systems
+report a power value without showing how it is computed. Here every step is
+a function, every constant is cited, and one instant of the match is
+recomputed by hand in [`docs/power_methodology.md`](docs/power_methodology.md).
+
+![One burst, decomposed step by step](figures/power_anatomy.png)
+
+With no parameter tuned, the metabolic indicators reproduce the published
+values:
+
+| | This repo | Published |
+|---|---|---|
+| Anaerobic share of energy | 39 % | 40 % (Osgnach et al. 2023) |
+| Metabolic power events / 15 min | 28.5 | 28 → 21 |
+| Recovery between events | 26 s | 26 → 37 s |
+| Energy vs speed-only estimate | +16 % | +20 % (Osgnach et al. 2010) |
+
+The direction-sensitive split proposed by Buchheit (GPS 3.0) shows that
+about half of the mechanical load comes from accelerating, braking and
+turning (MW_thigh), not from steady striding (MW_stride). Turning alone
+weighs as much as accelerating and braking combined, and speed-based reports
+see none of it.
+
+![Mechanical load split](figures/power_work_split.png)
+
+The limits are written down too. Metabolic power underestimates the cost of
+football actions and moves the opposite way to muscle activity during
+changes of direction (Buchheit et al. 2015; Hader et al. 2016).
+
 **Pitch control.** For each 1 m² of the pitch, the probability that each team
 would control a ball played there now, from players' positions and
 velocities (top image).
@@ -72,12 +103,16 @@ cd football-tracking-analysis
 pip install -e ".[dev]"
 python scripts/download_data.py      # Metrica open data (~230 MB) into data/metrica
 python scripts/make_figures.py       # figures/ and results/
+python scripts/make_power_figures.py # power analysis (needs the A-S profiles above)
 pytest                               # synthetic-trajectory tests, no data needed
 ```
 
 ## References
 
 - Spearman, W. (2018). *Beyond Expected Goals.* MIT Sloan Sports Analytics Conference.
+- di Prampero, P.E. & Osgnach, C. (2018). Metabolic power in team sports — Part 1: an update. *Int J Sports Med*, 39.
+- di Prampero, P.E. et al. (2023) and Osgnach, C. et al. (2023). Mechanical and metabolic power in accelerated running, Parts I and II. *Eur J Appl Physiol*.
+- Buchheit, M. et al. (2026). GPS 3.0: from distance into zones toward better proxies of internal neuromuscular load in elite football. *Sport Perform Sci Rep*, 280.
 - Morin, J.-B. et al. (2021). Individual acceleration-speed profile in-situ: a proof of concept in professional football players. *Journal of Biomechanics*, 123.
 - Data: [Metrica Sports sample data](https://github.com/metrica-sports/sample-data).
 
@@ -93,6 +128,13 @@ professionnels, open data Metrica Sports) :
 - profil accélération–vitesse *in situ* (A0, S0) ;
 - demandes « pire scénario » sur 5 minutes ;
 - modèle de **pitch control** de Spearman, vectorisé.
+
+**Puissance mécanique et métabolique.** Chaque équation est une fonction,
+chaque constante est sourcée, et un instant du match est recalculé à la main
+dans [`docs/power_methodology.md`](docs/power_methodology.md), avec un résumé
+en français. Sans aucun réglage, les indicateurs métaboliques retrouvent les
+valeurs publiées (part anaérobie 39 % contre 40 %, 28,5 événements par
+tranche de 15 minutes).
 
 **À retenir :**
 - Les décélérations dépassent les accélérations chez 88 % des joueurs.

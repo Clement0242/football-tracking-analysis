@@ -49,7 +49,14 @@ def _smooth(series: np.ndarray, window: int, poly: int) -> np.ndarray:
 def add_velocities(df: pd.DataFrame, window: int = 13, poly: int = 1,
                    acc_window: int = 25, max_speed: float = MAX_SPEED,
                    max_acc: float = MAX_ACC) -> pd.DataFrame:
-    """Add ``<player>_vx``, ``_vy``, ``_speed`` and ``_acc`` columns.
+    """Add ``<player>_vx``, ``_vy``, ``_speed``, ``_acc`` and ``_acc_c`` columns.
+
+    - ``acc``: tangential acceleration, i.e. the change of *speed* (m/s^2,
+      signed). This is what GPS reports usually call acceleration.
+    - ``acc_c``: centripetal acceleration, i.e. the change of *direction*
+      (m/s^2, >= 0), equal to |v x a| / |v|. Running a curve at constant
+      speed has zero tangential but non-zero centripetal acceleration;
+      Buchheit et al. (GPS 3.0) argue this is the part classic metrics miss.
 
     Velocity is filtered over ``window`` frames (0.5 s at 25 Hz) and
     acceleration, a second derivative and so much noisier, over
@@ -61,7 +68,7 @@ def add_velocities(df: pd.DataFrame, window: int = 13, poly: int = 1,
     dt = 1.0 / FPS
     new_cols = {}
     for p in player_ids(df):
-        cols = {k: np.full(len(df), np.nan) for k in ("vx", "vy", "speed", "acc")}
+        cols = {k: np.full(len(df), np.nan) for k in ("vx", "vy", "speed", "acc", "acc_c")}
         for _, idx in df.groupby("period").indices.items():
             x = df[f"{p}_x"].to_numpy(dtype=float)[idx]
             y = df[f"{p}_y"].to_numpy(dtype=float)[idx]
@@ -76,8 +83,17 @@ def add_velocities(df: pd.DataFrame, window: int = 13, poly: int = 1,
             speed = np.hypot(vx, vy)
             acc = _smooth(np.r_[np.nan, np.diff(speed)] / dt, acc_window, poly)
             acc[np.abs(acc) > max_acc] = np.nan
+            # Centripetal part: |v x a| / |v|, from the smoothed velocity vector.
+            ax = _smooth(np.r_[np.nan, np.diff(vx)] / dt, acc_window, poly)
+            ay = _smooth(np.r_[np.nan, np.diff(vy)] / dt, acc_window, poly)
+            with np.errstate(invalid="ignore", divide="ignore"):
+                acc_c = np.abs(vx * ay - vy * ax) / speed
+            # Direction is undefined when nearly still: no centripetal load.
+            acc_c[speed < 1.0] = 0.0
+            acc_c[acc_c > max_acc] = np.nan
             cols["vx"][idx], cols["vy"][idx] = vx, vy
             cols["speed"][idx], cols["acc"][idx] = speed, acc
+            cols["acc_c"][idx] = acc_c
         for k, v in cols.items():
             new_cols[f"{p}_{k}"] = v
     return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
